@@ -16,6 +16,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 
 # ==================================================================================
 # CONFIGURATION SECTION / قسم الإعدادات
@@ -636,7 +637,11 @@ async def process_logout(event, state: FSMContext):
 # ==================================================================================
 # TELETHON CLIENT & RESET LOGIC / نظام إعادة الضبط وتيليثون
 # ==================================================================================
-client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
+SESSION_STRING = os.getenv('SESSION_STRING', '')
+if SESSION_STRING:
+    client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
+else:
+    client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 pending_requests = {}
 
 # البوت الأساسي فقط هو من يملك ADMIN_ID الأصلي في الإعدادات
@@ -652,15 +657,12 @@ async def cmd_reset(message: types.Message, command: CommandObject):
         await message.answer(text, reply_markup=kb)
         return
     
-    if not command.args:
-        await message.answer("**❌ Please provide the 16-character code.**\n**Example:** `/reset ABCDEFGHIJKLMNOP`")
-        return
+    if command.args:
+        forward_text = f"/flourite {command.args}"
+    else:
+        forward_text = "/flourite"
 
-    full_text = message.text.strip()
-
-    # التنفيذ داخلي (Internal Server Execution) لجميع البوتات
-    # بما أن جميع البوتات تعمل بنفس الحساب ونفس السيرفر
-    await execute_reset_logic(user_id, full_text, message)
+    await execute_reset_logic(user_id, forward_text, message)
 async def execute_reset_logic(user_id, full_text, event_context, origin_bot_token=None):
     # التحقق من وجود حساب مربوط (API_ID / API_HASH)
     if not API_ID or not API_HASH:
@@ -1622,8 +1624,15 @@ async def main():
             print(f"Secondary Bot {os.getenv('API_TOKEN')[:10]}... Started (No Telethon)")
         else:
             # البوت الأساسي فقط هو من يتصل بالحساب
-            await client.start()
-            print("Primary Telethon Client Started")
+            if SESSION_STRING:
+                await client.connect()
+                if not await client.is_user_authorized():
+                    print("ERROR: SESSION_STRING is invalid or expired!")
+                else:
+                    print("Primary Telethon Client Started (StringSession)")
+            else:
+                await client.start()
+                print("Primary Telethon Client Started")
     except Exception as e:
         print(f"Telethon start error: {e}")
 
